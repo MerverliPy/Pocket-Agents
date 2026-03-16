@@ -1,0 +1,23 @@
+{
+  "name": "pocket-agents",
+  "version": "0.1.0",
+  "description": "A lightweight local-first framework for composing and running AI agents",
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "doctor": "node src/cli/index.js doctor",
+    "test": "node --test"
+  },
+  "keywords": [
+    "agents",
+    "ai",
+    "workflow",
+    "local-first"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "ajv": "^8.18.0"
+  }
+}

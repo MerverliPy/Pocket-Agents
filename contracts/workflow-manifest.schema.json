@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "workflow-manifest.schema.json",
+  "title": "WorkflowManifest",
+  "description": "Definition manifest for a Pocket-Agents workflow",
+  "type": "object",
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "description": "Semantic version string (major.minor.patch)",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+    },
+    "workflowStep": {
+      "type": "object",
+      "description": "A single step in a workflow",
+      "properties": {
+        "stepId": {
+          "type": "string",
+          "description": "Unique identifier for this step within the workflow",
+          "minLength": 1
+        },
+        "agentId": {
+          "type": "string",
+          "description": "Identifier of the agent to invoke for this step",
+          "minLength": 1
+        },
+        "toolIds": {
+          "type": "array",
+          "description": "List of tool identifiers available to the agent during this step",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "inputMapping": {
+          "type": "object",
+          "description": "Optional mapping of workflow context keys to agent input keys",
+          "additionalProperties": true
+        },
+        "outputKey": {
+          "type": "string",
+          "description": "Optional key under which to store this step's output in workflow context",
+          "minLength": 1
+        }
+      },
+      "required": ["stepId", "agentId"],
+      "additionalProperties": false
+    }
+  },
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique workflow identifier",
+      "minLength": 1
+    },
+    "version": {
+      "$ref": "#/$defs/semver"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of what this workflow does",
+      "minLength": 1
+    },
+    "steps": {
+      "type": "array",
+      "description": "Ordered list of steps to execute sequentially",
+      "items": {
+        "$ref": "#/$defs/workflowStep"
+      },
+      "minItems": 0
+    }
+  },
+  "required": ["id", "version", "description", "steps"],
+  "additionalProperties": false
+}

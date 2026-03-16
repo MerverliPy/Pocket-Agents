@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agent-manifest.schema.json",
+  "title": "AgentManifest",
+  "description": "Definition manifest for a Pocket-Agents agent",
+  "type": "object",
+  "$defs": {
+    "semver": {
+      "type": "string",
+      "description": "Semantic version string (major.minor.patch)",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$"
+    },
+    "jsonSchema": {
+      "type": "object",
+      "description": "A valid JSON Schema object describing input or output shape"
+    }
+  },
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique agent identifier in kebab-case",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "minLength": 1
+    },
+    "version": {
+      "$ref": "#/$defs/semver"
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of what this agent does",
+      "minLength": 1
+    },
+    "inputSchema": {
+      "$ref": "#/$defs/jsonSchema"
+    },
+    "outputSchema": {
+      "$ref": "#/$defs/jsonSchema"
+    },
+    "config": {
+      "type": "object",
+      "description": "Agent-specific static configuration",
+      "additionalProperties": true
+    }
+  },
+  "required": ["id", "version", "description", "inputSchema", "outputSchema"],
+  "additionalProperties": false
+}

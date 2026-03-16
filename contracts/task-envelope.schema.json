@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "task-envelope.schema.json",
+  "title": "TaskEnvelope",
+  "description": "Wrapper for a task dispatched to an agent within a workflow run",
+  "type": "object",
+  "properties": {
+    "taskId": {
+      "type": "string",
+      "description": "Unique identifier for this task instance",
+      "minLength": 1
+    },
+    "workflowId": {
+      "type": "string",
+      "description": "Identifier of the workflow this task belongs to",
+      "minLength": 1
+    },
+    "runId": {
+      "type": "string",
+      "description": "Unique identifier for this workflow run instance",
+      "minLength": 1
+    },
+    "stepId": {
+      "type": "string",
+      "description": "Identifier of the workflow step this task corresponds to",
+      "minLength": 1
+    },
+    "agentId": {
+      "type": "string",
+      "description": "Identifier of the agent to execute this task",
+      "minLength": 1
+    },
+    "input": {
+      "description": "Input data passed to the agent"
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Optional additional context for the task execution",
+      "additionalProperties": true
+    }
+  },
+  "required": ["taskId", "workflowId", "runId", "stepId", "agentId", "input"],
+  "additionalProperties": false
+}
