@@ -81,6 +81,27 @@ Add any new bug patterns, gotchas, or implementation lessons discovered this ses
 
 > New lessons are added here by the agent at the end of each session.
 
+### [2026-03-16] Phase 6 — Tool Execution Layer
+
+Key lessons from implementing the tool execution layer and built-in tools:
+
+- The executor's `_validatorCache` (module-level Map) is an intentional exception to the immutability rule. Document it clearly so future reviewers don't remove it or flag it as a bug.
+- Do NOT reuse the AJV instance from `src/core/validators/index.js` for tool I/O validation. That instance compiles fixed schemas at startup. Tool I/O schemas are arbitrary user-provided schemas compiled at call time — they require a separate AJV instance.
+- Built-in tool modules export `{ manifest, requiredPermissions, run }`. The `requiredPermissions` field is NOT part of the JSON Schema manifest — it is a runtime-only module export that the executor reads. Do not add it to the tool-manifest schema.
+- The `run()` function on built-in tools is called with `(input, context)`. Most tools ignore `context`, but shell-exec uses `context.config.defaultCommandTimeoutMs`. Always pass context for forward compatibility.
+- In ESM top-level module scripts, async CLI handlers (like `tool:run`) must use `await` at the top level rather than `.then()`. Without `await`, the synchronous code continues after the async if-block and hits the "Unknown command" fallthrough. ESM modules support top-level `await` in Node 18+.
+- `spawnSync` is correct for V1 shell execution: it does not throw on non-zero exit codes, returning them in `result.status` instead. `execSync` would throw on failure, making it harder to return `{ exitCode }` for callers to handle.
+- Tool IDs must match the `^[a-z][a-z0-9-]*$` pattern from the tool-manifest schema. Use hyphens (e.g. `file-read`, `shell-exec`), not dots (e.g. `file.read`). Dots are not in the schema's pattern.
+
+### [2026-03-16] dmux Preparatory CLI — Respect Phase Boundaries with Forward-Compatible Utilities
+
+When a user requests a capability that depends on a future phase (for example, parallel orchestration before a workflow runner exists), implement a thin preparatory utility rather than silently advancing scope. In this session, `dmux` support was delivered as `check` + `plan` commands only, with explicit placeholders for the future `run:workflow` command.
+
+How to apply this pattern in future sessions:
+- Deliver immediate user value with boundary-safe tooling (validation, planning, scaffolding).
+- Keep command templates explicit about deferred dependencies.
+- Record the scope decision in `decision-log.md` so later sessions can finish integration cleanly.
+
 ### [2026-03-16] Phase 0 — Documentation-First Baseline
 
 Phase 0 establishes that all documentation must precede runtime code. Key lessons:
@@ -90,6 +111,48 @@ Phase 0 establishes that all documentation must precede runtime code. Key lesson
 - `phase-plan.md` must include acceptance criteria per phase so completion is unambiguous.
 - Agent rules must explicitly require the session-close procedure — without it, project ops files drift out of sync quickly.
 - All JSON Schema `$ref` references must resolve within the `contracts/` directory. External URL refs will fail in offline environments and break determinism.
+
+### [2026-03-16] Phase 5 — In-Memory Registries
+
+Key lessons from implementing agent, tool, and workflow registries:
+
+- Registry functions (`register`, `get`, `has`, `list`) are standalone exports, not methods on the registry object. This keeps the registry as a plain frozen data object (no prototype), which is simpler to freeze and clone.
+- Use `new Map([...registry.entries, [id, manifest]])` to create a new Map without mutating. Never call `entries.set()` on the existing Map — it mutates shared state and breaks immutability.
+- Error `code` values should use dot-namespaced lowercase strings: `'registry.duplicate'` and `'registry.not_found'`. Using a consistent namespace prefix makes error handling in callers predictable.
+- Attach AJV `errors` array to the thrown Error when schema validation fails: `err.errors = errors`. This allows callers (and tests) to inspect individual field errors without re-running validation.
+- The `list()` function must return a **new** sorted array via `[...entries.keys()].sort()`. Do not sort in-place on a `.keys()` iterator — spread first, then sort.
+- Example manifests in `src/examples/` should be plain frozen JS objects exported as `manifest`. They are not executable — they serve as registry-ready definitions only. Document this clearly in the file header.
+- The CLI list handlers (`list-agents.js`, etc.) follow the same pattern as earlier handlers: pure logic exported as `runListX()`, returning `{ output: string }`. The CLI entry point (`index.js`) only dispatches.
+- `runtime.registries` is now a real frozen object `{ agents, tools, workflows }` — update the runtime test to check for this shape, not `null`.
+- The `stateStore` field remains `null` — do not confuse it with `registries`. Keep placeholders where they are until the relevant phase.
+
+### [2026-03-16] Phase 4 — Structured Logging and Event Infrastructure
+
+Key lessons from implementing the structured logger upgrade, event bus, and JSONL sink:
+
+- The `child(context)` pattern for loggers requires passing `boundContext` as a second parameter to `createLogger`. Keep it internal (`boundContext`) so external callers only ever call `.child()` — the second param is not part of the public API.
+- When implementing an immutable event bus with `Map`, always use `new Map([...bus.handlers, [key, newSet]])` to clone. Never use `map.set()` on the existing handlers map — that mutates shared state.
+- `subscribe` returns `{ bus, unsubscribe }` where `unsubscribe` is a function that takes the *current* bus at unsubscription time (not the bus at subscription time). This is important because the bus may have been updated (more subscriptions added) between subscribe and unsubscribe.
+- Use a `Set` for handlers per type so that subscribing the same handler twice is idempotent. This makes duplicate-subscription bugs silent rather than calling the handler twice.
+- `appendFileSync` is correct for single-process V1 JSONL event sinks. Do not introduce async file writing until multi-process use is required.
+- `readEvents` must filter empty lines after `split('\n')`. `appendFileSync` always writes a trailing `\n`, so the last split element is always an empty string. `.filter(line => line.trim() !== '')` is the correct guard.
+- When wiring the JSONL sink into runtime assembly, check `config.eventsFile` truthiness. An empty string (`''`) is the default — do not pass an empty string as a file path to `createJsonlSink`.
+- The `events:tail` command should return a structured `{ output, count, error? }` object, not write to stdout directly. This makes the function testable without subprocess spawning.
+
+### [2026-03-16] Phase 3 — Config Loading and Runtime Assembly
+
+Key lessons from building the config system and runtime assembly layer:
+
+- Accept an `env` parameter in the config loader (default: `process.env`) so tests can pass a synthetic env without mutating `process.env`. This pattern is essential for deterministic config tests.
+- `firstPresent(values, fallback)` helper is cleaner than chained `??` operators when values can be empty strings (which `??` does not catch). Treat `undefined`, `null`, and `''` as all absent.
+- `frameworkName` should be hardcoded in defaults and not overridable via env or file. Document this clearly in both code and PRD so future developers do not add an env var for it.
+- `dataDir` is a "derived" config key — its default is computed from `workspaceRoot`, not a static string. Handle derived keys last in the loader, after all other keys are resolved.
+- Always `Object.freeze()` the returned config and runtime objects. Immutability bugs are easy to introduce if callers can accidentally mutate shared state.
+- For boolean env var parsing, define explicit allowed truthy strings (`1`, `true`, `yes`). Do not use JavaScript truthiness on raw string values — any non-empty string is truthy in JS, including `'false'`.
+- For number env var parsing, use `parseInt(raw, 10)` and check `Number.isFinite(n) && n > 0`. A value of `0` or negative should fall back to the default rather than silently enabling a zero-timeout.
+- `config:show` must redact secret-like keys by name pattern. Even if current config has no secrets, implement the redaction mechanism now so that any future addition of a secret-like key is automatically safe.
+- Keep `LOG_LEVELS` as an ordered array (`['error', 'warn', 'info', 'debug']`) so that level comparison (`indexOf`) works correctly for suppression filtering in the logger.
+- The `before`/`after` hooks in `node:test` are called at the `describe` block level, not globally. Temp directories for file config tests should be created in a `before` hook and removed in an `after` hook scoped to the describe block.
 
 ### [2026-03-16] Phase 2 — Contracts & Schema Validation
 

@@ -2,7 +2,117 @@
 
 > Running log of major implementation choices. Most recent entries at the top.
 > For locked baseline decisions, see `docs/decisions.md`.
-> **Last updated:** 2026-03-16 (Phase 1)
+> **Last updated:** 2026-03-16 (Phase 6)
+
+---
+
+## [2026-03-16] Phase 6 — Tool Manifests Use Kebab-Case IDs (Not Dot-Notation)
+
+**Phase:** 6 — Tool Execution Layer
+**Decision:** Built-in tool IDs use kebab-case (e.g. `file-read`, `shell-exec`) to match the tool-manifest schema pattern `^[a-z][a-z0-9-]*$`. The Phase 6 requirements listed dot-notation (`file.read`) as conceptual names, not literal IDs.
+**Rationale:** The manifest schema was locked in Phase 2 with this pattern. Changing the schema would require a new AJV recompile and a decision-log entry; not justified when hyphens are equally readable.
+**Alternatives considered:** Modifying tool-manifest schema to allow dots — rejected (schema change with no functional benefit).
+**Impact:** CLI invocations use `tool:run file-read`, not `tool:run file.read`.
+**Locked:** yes
+
+---
+
+## [2026-03-16] Phase 6 — `requiredPermissions` as Module Export, Not Schema Field
+
+**Phase:** 6 — Tool Execution Layer
+**Decision:** Each built-in tool module exports `requiredPermissions: string[]` as a plain JS export. This field is NOT added to the tool-manifest JSON Schema.
+**Rationale:** Permission requirements are implementation details of each tool, not manifest metadata. Adding them to the schema would require updating the schema + validator for every permission type added in the future. Runtime code reads the module export directly.
+**Alternatives considered:** Adding a `permissions` object to the manifest schema (rejected — premature schema expansion); hardcoding permission checks in the executor by tool id (rejected — not extensible).
+**Impact:** `executeTool(tool, ...)` reads `tool.requiredPermissions`. Third-party tools can also export this field with no schema change.
+**Locked:** no
+
+---
+
+## [2026-03-16] Phase 6 — Separate AJV Instance for Tool I/O Validation
+
+**Phase:** 6 — Tool Execution Layer
+**Decision:** The executor creates its own module-level AJV instance (`_ajv`) for validating tool inputs and outputs. It does NOT share the AJV instance from `src/core/validators/index.js`.
+**Rationale:** The validators module compiles fixed contract schemas at startup. Tool I/O schemas are arbitrary user-provided JSON Schemas compiled on demand. Mixing the two in one AJV instance creates ordering and caching problems.
+**Alternatives considered:** Reusing the validators AJV (rejected — shared state issue); compiling a new AJV per call (rejected — no caching, slow).
+**Impact:** Two AJV instances exist in the process. Both use `{ allErrors: true }`.
+**Locked:** yes
+
+---
+
+## [2026-03-16] Out-of-Phase Utility — Preparatory `dmux` CLI Command Only (No Workflow Runner)
+
+**Phase:** 6 (supporting CLI utility)
+**Decision:** Add a preparatory `dmux` CLI command with `check` and `plan` subcommands, but do not implement workflow execution or parallel runtime behavior.
+**Rationale:** User requested dmux integration, but V1 scope and current phase boundaries do not include workflow execution. A preparatory command provides immediate utility (environment check + plan generation) without violating single-process/runtime constraints.
+**Alternatives considered:** Implement full `run:workflow` and parallel orchestration now (rejected — pre-builds future phase behavior); defer all dmux work (rejected — does not satisfy request).
+**Impact:** New `src/cli/dmux.js`, CLI router wiring in `src/cli/index.js`, and tests in `tests/cli/dmux.test.js`. Generated plan files are explicitly marked as forward-compatible placeholders.
+**Locked:** no
+
+---
+
+## [2026-03-16] Phase 5 — Registry Functions as Standalone Exports (Not Methods)
+
+**Phase:** 5 — In-Memory Registries
+**Decision:** Registry operations (`register`, `get`, `has`, `list`) are standalone exported functions that take the registry as their first argument. The registry itself is a plain frozen data object with no methods.
+**Rationale:** Plain data objects are simpler to freeze with `Object.freeze()` and safer to clone with spread. Methods on an object would imply a class-like structure, which conflicts with the immutable-data principle (D-013). This pattern is consistent with the event bus and config loader.
+**Alternatives considered:** Class-based registry with methods (rejected — implies mutation and prototype chain complexity); closures per registry instance (rejected — harder to serialize/test).
+**Impact:** All callers import the functions alongside the factory: `import { createAgentRegistry, register, get } from '...'`. The registry object itself carries no behavior.
+**Locked:** yes
+
+---
+
+## [2026-03-16] Phase 5 — Unified `registry.*` Error Code Namespace
+
+**Phase:** 5 — In-Memory Registries
+**Decision:** All registry errors use dot-namespaced codes: `registry.duplicate` and `registry.not_found`. These codes are consistent across agent, tool, and workflow registries.
+**Rationale:** A shared namespace makes error handling in callers predictable. If a caller catches registry errors, a single `if (err.code?.startsWith('registry.'))` handles all three registries. Using agent/tool/workflow-specific codes (e.g. `agent.not_found`) would require separate branches per registry type.
+**Alternatives considered:** Per-registry error codes (`agent.not_found`, `tool.not_found`) — rejected; more verbose and inconsistent. Generic `NOT_FOUND` codes — rejected; ambiguous when multiple lookup types exist.
+**Impact:** All three registry modules use `err.code = 'registry.duplicate'` and `err.code = 'registry.not_found'`.
+**Locked:** yes
+
+---
+
+## [2026-03-16] Phase 5 — Example Manifests in `src/examples/` (Not `agents/`, `tools/`, `workflows/`)
+
+**Phase:** 5 — In-Memory Registries
+**Decision:** Placeholder example manifests live in `src/examples/{agents,tools,workflows}/` rather than top-level `agents/`, `tools/`, `workflows/` directories.
+**Rationale:** The original architecture.md sketched top-level `agents/` and `tools/` directories. However, placing them under `src/examples/` makes clear these are source-level examples (imported by CLI handlers), not standalone user-defined definitions. User-provided definitions may live outside the `src/` tree in a future phase.
+**Alternatives considered:** Top-level `agents/` directory (originally planned but not yet established); `src/core/examples/` (too nested).
+**Impact:** `src/examples/agents/echo-agent.js`, `src/examples/tools/echo-tool.js`, `src/examples/workflows/hello-workflow.js`.
+**Locked:** no (may be reorganized when user-defined agent loading is introduced).
+
+---
+
+## [2026-03-16] Phase 4 — Immutable Event Bus (No Node EventEmitter)
+
+**Phase:** 4 — Structured Logging and In-Process Event Infrastructure
+**Decision:** The event bus uses a plain `Map<type, Set<handler>>` with every operation returning a new frozen bus. No Node.js `EventEmitter` inheritance.
+**Rationale:** `EventEmitter` is mutable by design and would break the immutability constraint (D-013). A plain Map-based bus is easier to test, has no hidden state, and requires no framework knowledge from callers.
+**Alternatives considered:** `EventEmitter` subclass (rejected — mutable); `mitt` npm package (rejected — external dep not justified when a plain Map is sufficient).
+**Impact:** All event subscriptions and unsubscriptions return new bus objects. Callers must reassign the bus variable after each subscribe/unsubscribe.
+**Locked:** yes
+
+---
+
+## [2026-03-16] Phase 4 — Logger `child()` with Bound Context
+
+**Phase:** 4 — Structured Logging and In-Process Event Infrastructure
+**Decision:** `createLogger` accepts a `boundContext` parameter (internal). Callers use `logger.child(context)` to create child loggers. The bound context is spread into every log entry before per-call data.
+**Rationale:** Avoids passing `runId`, `workflowId`, etc. to every single log call. The child pattern is consistent with pino, bunyan, and winston, so a future swap to a library requires no caller changes.
+**Alternatives considered:** Requiring callers to pass context data manually (rejected — noisy); a global context store (rejected — shared mutable state).
+**Impact:** `createLogger` signature extended with optional second param `boundContext`. Existing callers unaffected.
+**Locked:** yes
+
+---
+
+## [2026-03-16] Phase 4 — JSONL Sink is Opt-In via `PA_EVENTS_FILE`
+
+**Phase:** 4 — Structured Logging and In-Process Event Infrastructure
+**Decision:** The JSONL event sink is only attached when `config.eventsFile` is non-empty. The sink uses `appendFileSync` for simplicity.
+**Rationale:** Not all V1 use cases need event persistence. Opt-in avoids surprise file creation. `appendFileSync` is correct for single-process V1 — no async complexity needed.
+**Alternatives considered:** Always write events to a default file (rejected — side effects without configuration); async file writes (rejected — adds complexity for no benefit in single-process use).
+**Impact:** `config.eventsFile` added to `PocketAgentsConfig`. Runtime assembly checks the value and attaches the sink if set.
+**Locked:** no
 
 ---
 
@@ -20,6 +130,56 @@ Each entry follows this structure:
 **Impact:** <what this affects>
 **Locked:** yes | no
 ```
+
+---
+
+## [2026-03-16] Phase 3 — PA_ Prefix for All Environment Variables
+
+**Phase:** 3 — Config Loading and Runtime Assembly
+**Decision:** All Pocket-Agents environment variables use the `PA_` prefix (e.g. `PA_LOG_LEVEL`, `PA_ALLOW_SHELL`). The old `LOG_LEVEL` key from `.env.example` is replaced with `PA_LOG_LEVEL`.
+**Rationale:** A distinct prefix prevents collisions with environment variables from other tools in the same shell session. `PA_` is short, unambiguous, and clearly scoped to this project.
+**Alternatives considered:**
+- `POCKET_AGENTS_` — too verbose.
+- No prefix, use conventional names like `LOG_LEVEL` — risk of silent collision with other tools.
+**Impact:** `.env.example` updated. Any existing `.env` files using `LOG_LEVEL=` must be updated to `PA_LOG_LEVEL=`.
+**Locked:** Yes (for V1).
+
+---
+
+## [2026-03-16] Phase 3 — Config Loader Accepts `env` Parameter for Testability
+
+**Phase:** 3 — Config Loading and Runtime Assembly
+**Decision:** `loadConfig` accepts an optional `{ env }` parameter (defaults to `process.env`). Tests pass a synthetic env object instead of mutating `process.env`.
+**Rationale:** Mutating `process.env` in tests is fragile — cleanup is error-prone and test order matters. Passing env as a parameter makes config tests deterministic and isolated.
+**Alternatives considered:**
+- Mock `process.env` with `Object.defineProperty` — fragile and error-prone in parallel tests.
+- Use a separate `parseEnv` helper that takes a raw object — equivalent; merged into loader directly.
+**Impact:** All callers in production code use the default `env = process.env`. Only tests pass a custom env.
+**Locked:** Yes (for V1).
+
+---
+
+## [2026-03-16] Phase 3 — frameworkName is Immutable
+
+**Phase:** 3 — Config Loading and Runtime Assembly
+**Decision:** `frameworkName` is always `'pocket-agents'` and cannot be overridden via env var, config file, or programmatic overrides.
+**Rationale:** `frameworkName` is not a runtime setting — it is the identity of the framework. Allowing it to be overridden would create confusion in logs and error messages. If someone forks the project and renames it, they should update `defaults.js` directly.
+**Alternatives considered:** Allow env override — rejected; no legitimate use case exists.
+**Impact:** `loadConfig` silently ignores any `frameworkName` in overrides or file config.
+**Locked:** Yes (for V1).
+
+---
+
+## [2026-03-16] Phase 3 — Runtime Assembly Uses Null Placeholders for Unimplemented Components
+
+**Phase:** 3 — Config Loading and Runtime Assembly
+**Decision:** `createRuntime()` returns `null` for `eventBus`, `registries`, and `stateStore`. These will be replaced with real implementations in Phase 4.
+**Rationale:** Using `null` placeholders is the simplest approach that: (a) makes the shape of the runtime visible immediately, (b) causes a clear `TypeError` if any caller tries to use an unimplemented component, and (c) does not prematurely couple Phase 3 to Phase 4 implementations.
+**Alternatives considered:**
+- Stub objects that throw on method calls — more explicit but more code for no gain in Phase 3.
+- Omit the fields entirely — hides the planned interface shape.
+**Impact:** Phase 4 will assign real implementations to these slots. The runtime interface is stable.
+**Locked:** No (placeholders will be replaced in Phase 4).
 
 ---
 

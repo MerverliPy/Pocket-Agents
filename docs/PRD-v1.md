@@ -364,6 +364,26 @@ Pocket-Agents/
 - [ ] All contracts in `contracts/` are valid JSON
 - [ ] README documents how to run the echo workflow end-to-end
 
+### Configuration (Phase 3+)
+
+- [ ] Copy `.env.example` to `.env` and fill in values before running
+- [ ] `node src/cli/index.js config:show` prints resolved configuration
+- [ ] Verify security flags (`allowShell`, `allowHttp`, `allowFileWrite`) are `false` unless explicitly enabled
+- [ ] `PA_LOG_LEVEL` is set to `info` or higher in production/CI
+
+### Environment Variables Reference
+
+| Variable | Default | Description |
+|---|---|---|
+| `PA_LOG_LEVEL` | `info` | Logging verbosity: error\|warn\|info\|debug |
+| `PA_WORKSPACE_ROOT` | `process.cwd()` | Absolute path to workspace root |
+| `PA_DATA_DIR` | `<workspaceRoot>/.pocket-agents` | Absolute path to runtime data dir |
+| `PA_ALLOW_SHELL` | `false` | Permit shell execution by agents/tools |
+| `PA_ALLOW_HTTP` | `false` | Permit outbound HTTP by agents/tools |
+| `PA_ALLOW_FILE_WRITE` | `false` | Permit filesystem writes by agents/tools |
+| `PA_COMMAND_TIMEOUT_MS` | `30000` | CLI command timeout in milliseconds |
+| `PA_CONFIG_FILE` | auto-detect | Explicit path to `pocket-agents.config.json` |
+
 ---
 
 ## 12. Phased Implementation Plan

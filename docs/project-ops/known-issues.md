@@ -27,7 +27,31 @@
 
 ## Active Issues
 
-_No blocking issues after Phase 1._
+### [KI-004] shell-exec Shell Injection Risk
+
+**Severity:** medium
+**Phase:** 6
+**Status:** open
+**Reported:** 2026-03-16
+
+**Description:** The `shell-exec` tool passes the `command` string directly to `sh -c`. This is a shell injection vector if the command is constructed from untrusted input.
+**Impact:** An agent or workflow constructing shell commands from user-supplied data could execute arbitrary shell commands.
+**Workaround:** `allowShell` is `false` by default. Operators must opt in via `PA_ALLOW_SHELL=true`. Do not construct shell commands from untrusted data.
+**Resolution:** _Pending — Phase 7+ may add an approved-command allowlist or sandboxed execution._
+
+---
+
+### [KI-005] Local LSP Diagnostics Unavailable (typescript-language-server Missing)
+
+**Severity:** low
+**Phase:** cross-phase tooling
+**Status:** open
+**Reported:** 2026-03-16
+
+**Description:** LSP diagnostics calls fail because `typescript-language-server` is configured but not installed in the environment.
+**Impact:** LSP-based verification step cannot be executed in-session for JS files.
+**Workaround:** Use `npm test` and runtime command checks until LSP dependency is installed.
+**Resolution:** _Pending — install `typescript-language-server` and `typescript` globally or in the dev environment._
 
 ---
 
