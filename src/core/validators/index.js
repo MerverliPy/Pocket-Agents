@@ -37,6 +37,7 @@ const compiled = {
   workflowManifest: ajv.compile(loadSchema('workflow-manifest')),
   eventRecord: ajv.compile(loadSchema('event-record')),
   runResult: ajv.compile(loadSchema('run-result')),
+  agentResult: ajv.compile(loadSchema('agent-result')),
 };
 
 /**
@@ -104,4 +105,13 @@ export function validateEventRecord(data) {
  */
 export function validateRunResult(data) {
   return runValidation(compiled.runResult, data);
+}
+
+/**
+ * Validate an AgentResult object.
+ * @param {unknown} data
+ * @returns {{ valid: boolean, errors: Array<object>|null }}
+ */
+export function validateAgentResult(data) {
+  return runValidation(compiled.agentResult, data);
 }

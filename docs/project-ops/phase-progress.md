@@ -6,7 +6,106 @@
 
 ---
 
-## Current Phase: 6 — Tool Execution Layer
+## Current Phase: 8 — Sequential Workflow Runner
+
+**Status:** ✅ Complete
+
+---
+
+## Phase 8 — Sequential Workflow Runner
+
+**Started:** 2026-03-16
+**Completed:** 2026-03-16
+**Status:** ✅ Complete
+
+### Deliverables
+
+| File | Status |
+|---|---|
+| `contracts/workflow-manifest.schema.json` (Phase 8 step format) | ✅ Done — 2026-03-16 |
+| `src/runner/workflow-runner.js` | ✅ Done — 2026-03-16 |
+| `src/examples/workflows/hello-workflow.js` (updated to Phase 8 format) | ✅ Done — 2026-03-16 |
+| `src/examples/workflows/repo-inspect-workflow.js` | ✅ Done — 2026-03-16 |
+| `src/examples/workflows/api-normalize-workflow.js` | ✅ Done — 2026-03-16 |
+| `src/examples/workflows/content-admin-workflow.js` | ✅ Done — 2026-03-16 |
+| `src/cli/workflow-run.js` | ✅ Done — 2026-03-16 |
+| `src/cli/index.js` (`workflow:run` command added) | ✅ Done — 2026-03-16 |
+| `tests/runner/workflow-runner.test.js` | ✅ Done — 2026-03-16 |
+| `tests/cli/workflow-run.test.js` | ✅ Done — 2026-03-16 |
+| `tests/core/validators/validators.test.js` (workflow step assertions updated) | ✅ Done — 2026-03-16 |
+| `tests/core/registry/workflow-registry.test.js` (step format updated) | ✅ Done — 2026-03-16 |
+
+### Verification
+
+- `npm test` (via `node --test`) — ✅ 398/398 tests pass (29 new, 369 existing)
+- `node src/cli/index.js workflow:run hello-workflow --input '{"message":"world"}'` — ✅ single-step echo
+- `node src/cli/index.js workflow:run content-admin-workflow --input '{"content":"Hi","source":"user","status":"draft"}'` — ✅ 3-step agent+transform+output
+- `node src/cli/index.js workflow:run api-normalize-workflow --input '{"data":{"firstName":"Alice"},"mapping":[{"from":"firstName","to":"name"}]}'` — ✅ agent + output steps
+- `node src/cli/index.js workflow:run repo-inspect-workflow --input '{"dir":"./src/runner"}'` — ✅ file inspection workflow
+
+### Notes
+
+- Workflow step format changed: `stepId`/`agentId` → `id`/`type`/`ref` (see decision-log)
+- Input mapping: dot-notation paths resolved against `{ input, steps }` workflow context
+- Step types: `agent` (runAgent), `tool` (executeTool), `transform`/`output` (assemble from context)
+- `onError: 'continue'` → `partial` status; `onError: 'fail'` (default) → `failed` status
+- `timeoutMs` per step: uses `Promise.race` + `clearTimeout` in `.finally()`
+- All 6 lifecycle events emitted: `workflow.started`, `workflow.step.started/completed/failed`, `workflow.completed/failed`
+- RunResult validated against `run-result.schema.json` on every execution (soft — logs on bug)
+
+---
+
+## Previous Phase: 7 — Agent Contract and Single-Agent Runner
+
+**Status:** ✅ Complete
+
+---
+
+## Phase 7 — Agent Contract and Single-Agent Runner
+
+**Started:** 2026-03-16
+**Completed:** 2026-03-16
+**Status:** ✅ Complete
+
+### Deliverables
+
+| File | Status |
+|---|---|
+| `contracts/agent-result.schema.json` | ✅ Done — 2026-03-16 |
+| `src/state/memory-store.js` | ✅ Done — 2026-03-16 |
+| `src/runner/agent-context.js` | ✅ Done — 2026-03-16 |
+| `src/runner/agent-runner.js` | ✅ Done — 2026-03-16 |
+| `src/examples/agents/echo-agent.js` (add execute()) | ✅ Done — 2026-03-16 |
+| `src/examples/agents/repo-inspect-agent.js` | ✅ Done — 2026-03-16 |
+| `src/examples/agents/api-transform-agent.js` | ✅ Done — 2026-03-16 |
+| `src/cli/agent-run.js` | ✅ Done — 2026-03-16 |
+| `src/cli/index.js` (agent:run added) | ✅ Done — 2026-03-16 |
+| `src/core/validators/index.js` (validateAgentResult added) | ✅ Done — 2026-03-16 |
+| `src/runtime/index.js` (stateStore wired) | ✅ Done — 2026-03-16 |
+| `tests/state/memory-store.test.js` | ✅ Done — 2026-03-16 |
+| `tests/runner/agent-runner.test.js` | ✅ Done — 2026-03-16 |
+| `tests/cli/agent-run.test.js` | ✅ Done — 2026-03-16 |
+| `tests/runtime/runtime.test.js` (stateStore assertion updated) | ✅ Done — 2026-03-16 |
+
+### Verification
+
+- `npm test` — ✅ 369/369 tests pass (42 new, 327 existing)
+- `node src/cli/index.js agent:run echo-agent --input '{"message":"hello"}'` — ✅ `{"message":"hello"}`
+- `node src/cli/index.js agent:run api-transform --input '{"data":{"firstName":"Alice","age":30},"mapping":[{"from":"firstName","to":"name"}]}'` — ✅ `{"transformed":{"name":"Alice"},"appliedRules":1}`
+- `node src/cli/index.js agent:run repo-inspect --input '{"dir":"./src/runner"}'` — ✅ lists runner files
+
+### Notes
+
+- Agent module contract: `export const manifest = {...}; export async function execute(taskEnvelope, context) {...}`
+- `loadAgentModule` is dependency-injected into `runAgent()` for testability
+- `runAgent()` never throws — all failures produce `status: 'failed'` in AgentResult
+- `stateStore` is now a live `createStore()` instance (was null since Phase 3)
+- `invokeTool` in AgentContext uses `BUILTIN_TOOLS` directly (not tool registry manifests)
+- KI-006 (repo-inspect field name bug) found and resolved within this session
+
+---
+
+## Previous Phase: 6 — Tool Execution Layer
 
 **Status:** ✅ Complete
 

@@ -160,15 +160,18 @@ describe('validateToolManifest', () => {
 // ---------------------------------------------------------------------------
 
 describe('validateWorkflowManifest', () => {
+  // Phase 8 step format: id + type required; ref, inputMapping, outputKey,
+  // timeoutMs, onError optional.
   const valid = {
     id: 'echo-workflow',
     version: '1.0.0',
     description: 'Simple echo workflow',
     steps: [
       {
-        stepId: 'step-1',
-        agentId: 'echo-agent',
-        toolIds: ['echo-tool'],
+        id: 'step-1',
+        type: 'agent',
+        ref: 'echo-agent',
+        inputMapping: { message: 'input.message' },
         outputKey: 'echoResult',
       },
     ],
@@ -185,10 +188,35 @@ describe('validateWorkflowManifest', () => {
     assert.equal(result.valid, true);
   });
 
-  it('accepts steps without optional toolIds, inputMapping, outputKey', () => {
+  it('accepts steps without optional ref, inputMapping, outputKey', () => {
     const result = validateWorkflowManifest({
       ...valid,
-      steps: [{ stepId: 'step-1', agentId: 'echo-agent' }],
+      steps: [{ id: 'step-1', type: 'transform' }],
+    });
+    assert.equal(result.valid, true);
+  });
+
+  it('accepts all four step types', () => {
+    const allTypes = ['agent', 'tool', 'transform', 'output'];
+    for (const type of allTypes) {
+      const result = validateWorkflowManifest({
+        ...valid,
+        steps: [{ id: 'step-1', type }],
+      });
+      assert.equal(result.valid, true, `type "${type}" should be valid`);
+    }
+  });
+
+  it('accepts optional timeoutMs and onError fields', () => {
+    const result = validateWorkflowManifest({
+      ...valid,
+      steps: [{
+        id: 'step-1',
+        type: 'agent',
+        ref: 'echo-agent',
+        timeoutMs: 5000,
+        onError: 'continue',
+      }],
     });
     assert.equal(result.valid, true);
   });
@@ -199,10 +227,26 @@ describe('validateWorkflowManifest', () => {
     assert.equal(result.valid, false);
   });
 
-  it('rejects a step missing agentId', () => {
+  it('rejects a step missing required id', () => {
     const result = validateWorkflowManifest({
       ...valid,
-      steps: [{ stepId: 'step-1' }],
+      steps: [{ type: 'agent' }],
+    });
+    assert.equal(result.valid, false);
+  });
+
+  it('rejects a step missing required type', () => {
+    const result = validateWorkflowManifest({
+      ...valid,
+      steps: [{ id: 'step-1' }],
+    });
+    assert.equal(result.valid, false);
+  });
+
+  it('rejects a step with an invalid type value', () => {
+    const result = validateWorkflowManifest({
+      ...valid,
+      steps: [{ id: 'step-1', type: 'unknown' }],
     });
     assert.equal(result.valid, false);
   });
@@ -214,6 +258,14 @@ describe('validateWorkflowManifest', () => {
 
   it('rejects additional unknown top-level properties', () => {
     const result = validateWorkflowManifest({ ...valid, author: 'test' });
+    assert.equal(result.valid, false);
+  });
+
+  it('rejects additional unknown step properties', () => {
+    const result = validateWorkflowManifest({
+      ...valid,
+      steps: [{ id: 'step-1', type: 'agent', unknownField: true }],
+    });
     assert.equal(result.valid, false);
   });
 });

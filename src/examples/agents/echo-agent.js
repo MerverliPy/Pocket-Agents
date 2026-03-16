@@ -1,11 +1,11 @@
 /**
- * Echo agent manifest — placeholder example.
+ * echo-agent — Echoes its input back as output unchanged.
  *
- * This file is not executable. It exports a registry-ready AgentManifest that
- * conforms to the agent-manifest schema.
+ * Useful for testing agent pipelines and verifying the runner lifecycle.
  *
- * Purpose: demonstrate how to define an agent for the Pocket-Agents registry.
- * Execution logic is deferred to a later phase.
+ * Contract:
+ *   Input:  { message: string }
+ *   Output: { message: string }
  */
 
 /** @type {import('../../core/validators/index.js').AgentManifest} */
@@ -30,3 +30,16 @@ export const manifest = Object.freeze({
     additionalProperties: false,
   },
 });
+
+/**
+ * Execute the echo agent.
+ *
+ * @param {object} taskEnvelope - Validated TaskEnvelope
+ * @param {object} context      - AgentContext (runId, logger, invokeTool, etc.)
+ * @returns {Promise<{ message: string }>}
+ */
+export async function execute(taskEnvelope, context) {
+  const { message } = taskEnvelope.input;
+  context.logger.info('[echo-agent] echoing message', { message });
+  return { message };
+}

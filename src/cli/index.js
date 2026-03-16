@@ -13,6 +13,8 @@
  *   list:tools        Print registered tool ids (one per line)
  *   list:workflows    Print registered workflow ids (one per line)
  *   tool:run          Execute a built-in tool with a JSON input payload
+ *   agent:run         Execute an agent with a JSON input payload
+ *   workflow:run      Execute a workflow with a JSON input payload
  *   dmux              dmux utility commands (`check`, `plan`)
  */
 
@@ -24,8 +26,10 @@ import { runListTools } from './list-tools.js';
 import { runListWorkflows } from './list-workflows.js';
 import { runDmux } from './dmux.js';
 import { runToolRun } from './tool-run.js';
+import { runAgentRun } from './agent-run.js';
+import { runWorkflowRun } from './workflow-run.js';
 
-const COMMANDS = 'doctor, config:show, events:tail, list:agents, list:tools, list:workflows, tool:run, dmux';
+const COMMANDS = 'doctor, config:show, events:tail, list:agents, list:tools, list:workflows, tool:run, agent:run, workflow:run, dmux';
 const [, , command, ...args] = process.argv;
 
 if (!command) {
@@ -82,6 +86,32 @@ if (command === 'tool:run') {
   const { output, error } = await runToolRun(toolId, inputJson);
   if (error) {
     process.stderr.write(`tool:run: ${error}\n`);
+    process.exit(1);
+  }
+  process.stdout.write(output + '\n');
+  process.exit(0);
+}
+
+if (command === 'agent:run') {
+  const agentId  = args[0];
+  const inputIdx = args.indexOf('--input');
+  const inputJson = inputIdx !== -1 ? args[inputIdx + 1] : undefined;
+  const { output, error } = await runAgentRun(agentId, inputJson);
+  if (error) {
+    process.stderr.write(`${error}\n`);
+    process.exit(1);
+  }
+  process.stdout.write(output + '\n');
+  process.exit(0);
+}
+
+if (command === 'workflow:run') {
+  const workflowId = args[0];
+  const inputIdx  = args.indexOf('--input');
+  const inputJson = inputIdx !== -1 ? args[inputIdx + 1] : undefined;
+  const { output, error } = await runWorkflowRun(workflowId, inputJson);
+  if (error) {
+    process.stderr.write(`${error}\n`);
     process.exit(1);
   }
   process.stdout.write(output + '\n');

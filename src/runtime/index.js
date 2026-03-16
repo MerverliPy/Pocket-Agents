@@ -22,6 +22,7 @@ import { createJsonlSink } from '../events/jsonl-sink.js';
 import { createAgentRegistry } from '../core/registry/agent-registry.js';
 import { createToolRegistry } from '../core/registry/tool-registry.js';
 import { createWorkflowRegistry } from '../core/registry/workflow-registry.js';
+import { createStore } from '../state/memory-store.js';
 
 /**
  * @typedef {import('../config/loader.js').PocketAgentsConfig} PocketAgentsConfig
@@ -71,7 +72,7 @@ export function createRuntime(configOverrides = {}) {
       workflows: createWorkflowRegistry(),
     }),
 
-    /** @type {null} Run-scoped KV state store — placeholder until Phase 6. */
-    stateStore: null,
+    /** @type {Readonly<object>} Run-scoped KV state store — wired in Phase 7. */
+    stateStore: createStore(),
   });
 }

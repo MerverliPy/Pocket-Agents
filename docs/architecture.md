@@ -289,14 +289,22 @@ sorted ids one per line.
 ┌─────────────────────────────────────────────────┐
 │  Node.js Process                                 │
 │                                                  │
-│  CLI (src/index.js)                              │
-│    └─> WorkflowRunner                            │
-│          └─> StepExecutor (per step)             │
-│                ├─> AgentRegistry.resolve()       │
-│                ├─> ToolRegistry.resolve()        │
-│                ├─> SchemaValidator.validate()    │
-│                ├─> agent.run(input, memory)      │
-│                └─> EventBus.emit(event)          │
+│  CLI (src/cli/index.js)                          │
+│    ├─> workflow:run → workflow-run.js            │
+│    │       └─> runWorkflow(runtime, id, input)  │
+│    │             ├─> WorkflowRegistry.get()      │
+│    │             └─> [for each step]             │
+│    │                   ├─> agent: runAgent()     │
+│    │                   ├─> tool: executeTool()   │
+│    │                   └─> transform/output:     │
+│    │                         resolveInputMapping │
+│    └─> agent:run  → agent-run.js                │
+│            └─> runAgent(envelope, runtime, load) │
+│                  ├─> AgentRegistry.get()         │
+│                  ├─> loadAgentModule(agentId)    │
+│                  ├─> SchemaValidator.validate()  │
+│                  ├─> agent.execute(env, context) │
+│                  └─> EventBus.emit(event)        │
 │                                                  │
 │  MemoryStore (run-scoped KV)                     │
 │  EventBus (in-process emitter)                   │
@@ -305,6 +313,46 @@ sorted ids one per line.
 ```
 
 All components share a single process memory space. No IPC, no message passing.
+
+### Workflow Context and Input Mapping (Phase 8)
+
+Each `runWorkflow` execution maintains a `workflowContext` object:
+
+```
+workflowContext = {
+  workflowId: string,
+  runId:      string,
+  input:      <initial workflow input>,
+  steps:      { [stepId]: <step output> }
+}
+```
+
+Step `inputMapping` values are dot-notation paths resolved against this context:
+- `"input.foo"` → `workflowContext.input.foo`
+- `"steps.step1.bar"` → `workflowContext.steps.step1.bar`
+- Non-string values are passed through as literals.
+
+### Workflow Step Types (Phase 8)
+
+| Type | Execution | `ref` |
+|------|-----------|-------|
+| `agent` | Delegates to `runAgent()` | Agent id (e.g. `echo-agent`) |
+| `tool` | Delegates to `executeTool()` | Built-in tool id (e.g. `file-list`) |
+| `transform` | Assembles object from resolved inputMapping | Not used |
+| `output` | Same as `transform`; marks final output step | Not used |
+
+### Workflow Lifecycle Events (Phase 8)
+
+All events are emitted via the in-process EventBus:
+
+| Event | Timing |
+|-------|--------|
+| `workflow.started` | Before first step |
+| `workflow.step.started` | Before each step |
+| `workflow.step.completed` | After each step succeeds |
+| `workflow.step.failed` | After each step fails |
+| `workflow.completed` | After last step (status: success or partial) |
+| `workflow.failed` | When workflow stops due to a failed step (onError=fail) |
 
 ---
 

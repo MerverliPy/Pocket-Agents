@@ -12,38 +12,45 @@
     },
     "workflowStep": {
       "type": "object",
-      "description": "A single step in a workflow",
+      "description": "A single step in a sequential workflow",
       "properties": {
-        "stepId": {
+        "id": {
           "type": "string",
           "description": "Unique identifier for this step within the workflow",
           "minLength": 1
         },
-        "agentId": {
+        "type": {
           "type": "string",
-          "description": "Identifier of the agent to invoke for this step",
-          "minLength": 1
+          "description": "Step execution type",
+          "enum": ["agent", "tool", "transform", "output"]
         },
-        "toolIds": {
-          "type": "array",
-          "description": "List of tool identifiers available to the agent during this step",
-          "items": {
-            "type": "string",
-            "minLength": 1
-          }
+        "ref": {
+          "type": "string",
+          "description": "Reference to the agent id (for type=agent) or tool id (for type=tool) to invoke",
+          "minLength": 1
         },
         "inputMapping": {
           "type": "object",
-          "description": "Optional mapping of workflow context keys to agent input keys",
+          "description": "Maps step input keys to dot-notation paths in workflow context (e.g. 'input.foo', 'steps.step1.bar') or literal values",
           "additionalProperties": true
         },
         "outputKey": {
           "type": "string",
-          "description": "Optional key under which to store this step's output in workflow context",
+          "description": "Optional label under which to store this step's output in workflow context (steps.<outputKey>); defaults to step id",
           "minLength": 1
+        },
+        "timeoutMs": {
+          "type": "number",
+          "description": "Optional maximum milliseconds this step may run before being aborted with a timeout error",
+          "minimum": 1
+        },
+        "onError": {
+          "type": "string",
+          "description": "Error policy for this step. 'fail' (default) stops the workflow; 'continue' records failure and proceeds",
+          "enum": ["fail", "continue"]
         }
       },
-      "required": ["stepId", "agentId"],
+      "required": ["id", "type"],
       "additionalProperties": false
     }
   },

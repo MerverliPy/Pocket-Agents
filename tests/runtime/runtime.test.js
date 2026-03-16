@@ -72,9 +72,11 @@ describe('createRuntime', () => {
     assert.ok('workflows' in rt.registries);
   });
 
-  it('stateStore is null (Phase 5 placeholder)', () => {
+  it('stateStore is a live memory store (Phase 7)', () => {
     const rt = createRuntime();
-    assert.equal(rt.stateStore, null);
+    assert.ok(rt.stateStore !== null, 'stateStore should be non-null');
+    assert.equal(typeof rt.stateStore, 'object');
+    assert.ok(rt.stateStore.entries instanceof Map, 'stateStore should have an entries Map');
   });
 
   it('accepts config overrides and applies them', () => {

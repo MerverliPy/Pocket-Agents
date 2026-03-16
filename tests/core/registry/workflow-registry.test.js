@@ -23,8 +23,9 @@ const VALID_MANIFEST = Object.freeze({
   description: 'A simple hello workflow',
   steps: [
     {
-      stepId: 'step-1',
-      agentId: 'echo-agent',
+      id: 'step-1',
+      type: 'agent',
+      ref: 'echo-agent',
     },
   ],
 });

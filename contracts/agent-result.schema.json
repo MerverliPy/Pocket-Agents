@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "agent-result.schema.json",
+  "title": "AgentResult",
+  "description": "Result of a single agent execution dispatched by the agent runner",
+  "type": "object",
+  "properties": {
+    "runId": {
+      "type": "string",
+      "description": "Unique identifier for this run instance",
+      "minLength": 1
+    },
+    "taskId": {
+      "type": "string",
+      "description": "Identifier of the task that was executed",
+      "minLength": 1
+    },
+    "agentId": {
+      "type": "string",
+      "description": "Identifier of the agent that was executed",
+      "minLength": 1
+    },
+    "status": {
+      "type": "string",
+      "description": "Outcome of the agent execution",
+      "enum": ["success", "failed"]
+    },
+    "output": {
+      "description": "Output produced by the agent, or null if execution failed"
+    },
+    "error": {
+      "type": ["string", "null"],
+      "description": "Error message if execution failed, otherwise null"
+    },
+    "startedAt": {
+      "type": "string",
+      "description": "ISO 8601 UTC timestamp when execution started",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
+    },
+    "completedAt": {
+      "type": "string",
+      "description": "ISO 8601 UTC timestamp when execution completed",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}"
+    },
+    "durationMs": {
+      "type": "number",
+      "description": "Wall-clock time in milliseconds from start to completion",
+      "minimum": 0
+    }
+  },
+  "required": [
+    "runId",
+    "taskId",
+    "agentId",
+    "status",
+    "output",
+    "error",
+    "startedAt",
+    "completedAt",
+    "durationMs"
+  ],
+  "additionalProperties": false
+}

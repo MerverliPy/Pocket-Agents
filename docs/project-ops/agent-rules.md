@@ -81,6 +81,31 @@ Add any new bug patterns, gotchas, or implementation lessons discovered this ses
 
 > New lessons are added here by the agent at the end of each session.
 
+### [2026-03-16] Phase 8 — Sequential Workflow Runner
+
+Key lessons from implementing the workflow execution engine:
+
+- **`withTimeout` must use `clearTimeout` in `.finally()`, NOT `handle.unref()`**: Using `unref()` allows the event loop to exit before the timer fires. In `node:test`, this causes the test to be cancelled with "Promise resolution still pending but event loop has already resolved". The correct pattern: `Promise.race([promise, timeout]).finally(() => clearTimeout(handle))`. This cleans up the timer in both the "promise wins" and "timeout wins" cases.
+- **Pending Promises from slow-agent timeout tests cause node:test suite cancellation**: If an `async` test creates a Promise that never settles (e.g. a "slow" agent that blocks forever), node:test detects the dangling Promise and cancels all subsequent tests in the same suite. Fix: use an explicit resolver (`let resolve; new Promise(r => { resolve = r; })`) and call `resolve({})` + drain microtasks (`await Promise.resolve()` x2) before the test function returns.
+- **Dynamic `await import()` inside `it()` blocks causes test cancellation**: Top-level `await import()` works fine at module load time. But inside a `describe/it` async function, the dynamic import may race with the test runner's event loop cleanup. Always use static `import` at the top of test files.
+- **Workflow step schema is a pre-1.0 breaking change**: Renaming `stepId`→`id`, `agentId`→`ref`, adding `type` breaks all existing workflow manifests. Since V1 is not yet released, this is acceptable. Always document schema-breaking changes in `decision-log.md` and `known-issues.md` with a clear migration path.
+- **Input mapping silently returns `undefined` for missing paths**: `resolvePath` traverses the context object and returns `undefined` if any key is missing. This is correct behavior (agent input validation catches missing required fields) but can be confusing. Log the resolved input in debug mode to make debugging easier.
+- **`onError: 'continue'` produces `partial` status, not `success`**: The distinction between `success` (all steps pass) and `partial` (some fail, workflow continues) must be communicated clearly in CLI output. The RunResult `status` field handles this — callers can check for `status !== 'success'` rather than only checking `status === 'failed'`.
+- **Workflow context structure `{ workflowId, runId, input, steps }` vs path resolution context `{ input, steps }`**: The `workflowContext` object passed to `resolveInputMapping` contains `input` and `steps` as top-level keys. Paths like `"input.foo"` and `"steps.step1.bar"` navigate this structure correctly. Do NOT expose `workflowId` or `runId` as resolvable paths — they are internal routing fields, not data fields.
+
+### [2026-03-16] Phase 7 — Agent Contract and Single-Agent Runner
+
+Key lessons from implementing the agent execution model:
+
+- **`loadAgentModule` as a dependency injection parameter** is the correct V1 pattern for the agent runner. Passing a loader function (rather than hardcoding a path or doing dynamic import inside the runner) keeps the runner path-agnostic and trivially testable — tests pass a synchronous stub loader; the CLI passes a real `import()` loader.
+- **Agent module contract is `{ manifest, execute }`** — not just a manifest. The `execute(taskEnvelope, context)` function is the new addition Phase 7 adds to Phase 5's manifest-only examples. Both must be exported from the same module file.
+- **`file-list` returns `{ entries }` not `{ files }`** — a lesson for any agent using the built-in file-list tool. The tool returns directory entry names (not full paths) under the key `entries`. The `repo-inspect-agent` initially used `result.files` and errored. Always check the tool's actual outputSchema, not the agent's assumed shape.
+- **`runAgent()` never throws** (by design) — all error paths are captured in `AgentResult.error`. Only a programming error (missing `loadAgentModule` argument) throws. This makes it safe to `await runAgent(...)` in a CLI handler without a top-level try/catch for expected failures.
+- **Separate AJV instance in agent-runner.js** is correct — same pattern as executor.js. Agent I/O schemas are agent-defined, not fixed contract schemas. Do not share AJV instances between the contract validator module and runtime I/O validation.
+- **AgentContext `invokeTool` uses `BUILTIN_TOOLS` directly** — the tool registry stores manifests only (no `run` function). Built-in tools have the full `{ manifest, requiredPermissions, run }` shape accessible via `BUILTIN_TOOLS.get(toolId)`. This is the correct V1 path for agent→tool invocation.
+- **`stateStore` in runtime is now a live `createStore()` instance** — update the runtime test to check `stateStore.entries instanceof Map` (not `=== null`). The old test checked `null` from Phase 3; it breaks if not updated.
+- **Scoped store in AgentContext isolates run data** — `createScope(stateStore, runId)` is called in `createAgentContext`. If `stateStore` is null (test scenarios), `scopedStore` is null. Always guard against null stateStore before calling scope operations.
+
 ### [2026-03-16] Phase 6 — Tool Execution Layer
 
 Key lessons from implementing the tool execution layer and built-in tools:

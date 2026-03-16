@@ -2,7 +2,71 @@
 
 > Running log of major implementation choices. Most recent entries at the top.
 > For locked baseline decisions, see `docs/decisions.md`.
-> **Last updated:** 2026-03-16 (Phase 6)
+> **Last updated:** 2026-03-16 (Phase 8)
+
+---
+
+## [2026-03-16] Phase 8 — Workflow Step Schema: `id`/`type`/`ref` Replaces `stepId`/`agentId`
+
+**Phase:** 8 — Sequential Workflow Runner
+**Decision:** The `workflowStep` schema was updated from `{ stepId, agentId, toolIds, inputMapping, outputKey }` to `{ id, type, ref, inputMapping, outputKey, timeoutMs, onError }`. `id` replaces `stepId`; `type` (enum: agent|tool|transform|output) is new; `ref` replaces `agentId`. `toolIds` was removed (agents access tools via context.invokeTool in V1).
+**Rationale:** The new format is more expressive and future-safe: `type` makes the step execution model explicit (agent vs. tool vs. transform vs. output); `ref` is generic (doesn't imply only agents). The old `agentId`-only step was too narrow for multi-type workflows. Updated `hello-workflow.js` and all registry tests accordingly.
+**Alternatives considered:** Keeping `stepId`/`agentId` and adding new fields alongside them (rejected — ambiguous schema with two identically-purposed fields; cleaner to rename once and document the break).
+**Impact:** Breaks any existing workflow manifests using `stepId`/`agentId`. All example workflows and tests updated. Schema version unchanged (still 1.0.0) — this is a pre-1.0 breaking change.
+**Locked:** no
+
+---
+
+## [2026-03-16] Phase 8 — `withTimeout` Uses `clearTimeout` in `.finally()` Instead of `unref()`
+
+**Phase:** 8 — Sequential Workflow Runner
+**Decision:** `withTimeout(promise, ms)` uses `.finally(() => clearTimeout(handle))` to clean up the timer. The earlier design used `handle.unref()` to avoid keeping the process alive, but that caused the timer to be garbage-collected before firing in `node:test` (event loop exited early, test was cancelled).
+**Rationale:** `clearTimeout` in `.finally()` is the correct pattern: if the Promise wins the race, the timer is cleared immediately (no dangling ref); if the timeout wins, `clearTimeout` on a fired timer is a safe no-op. This works cleanly in both test and production contexts.
+**Alternatives considered:** `unref()` (rejected — causes the timeout test to be cancelled in node:test because the event loop exits before the timer fires); not cleaning up the timer (rejected — leaves a dangling ref that keeps the event loop alive after the race resolves).
+**Locked:** no
+
+---
+
+## [2026-03-16] Phase 8 — Input Mapping via Dot-Notation Path Resolution
+
+**Phase:** 8 — Sequential Workflow Runner
+**Decision:** Step `inputMapping` uses dot-notation string paths resolved against a `workflowContext = { workflowId, runId, input, steps }` object. E.g., `"input.message"` → `workflowContext.input.message`; `"steps.step1.result"` → `workflowContext.steps.step1.result`. Non-string values in inputMapping are passed through as literals.
+**Rationale:** Simplest viable mechanism for V1 step-to-step data flow. No template engine, no JSONPath, no dynamic expressions — just dot-split traversal. Covers 100% of the use cases in the example workflows. Easily replaced by a richer expression engine in a future phase without schema changes.
+**Alternatives considered:** JSONPath (rejected — extra dependency, overkill for V1); Handlebars/template strings (rejected — text-rendering model doesn't match structured JSON output); no input mapping at all (rejected — makes chained workflows impossible to define).
+**Locked:** no
+
+---
+
+## [2026-03-16] Phase 7 — `loadAgentModule` as Dependency Injection Parameter
+
+**Phase:** 7 — Agent Contract and Single-Agent Runner
+**Decision:** `runAgent(taskEnvelope, runtime, loadAgentModule)` accepts a `loadAgentModule` function as a caller-provided parameter rather than hardcoding a path convention or doing dynamic import inside the runner.
+**Rationale:** Makes the runner testable without the filesystem — tests pass a stub loader that returns a mock module synchronously. The CLI passes a real `import()` loader. This is the same DI pattern used in the event bus (handler injection) and config loader (env injection).
+**Alternatives considered:** Hardcode `src/examples/agents/${agentId}.js` in the runner (rejected — couples runner to directory layout; breaks tests); store execute() in the agent registry (rejected — breaks existing registry API and Phase 5 tests).
+**Impact:** Every caller of `runAgent` must supply a loader. The CLI provides `makeModuleLoader(agentsDir)` which maps known agent ids to filenames.
+**Locked:** no
+
+---
+
+## [2026-03-16] Phase 7 — Agent Result Contract (`agent-result.schema.json`)
+
+**Phase:** 7 — Agent Contract and Single-Agent Runner
+**Decision:** Introduce `contracts/agent-result.schema.json` for the single-agent execution result, separate from `run-result.schema.json` (workflow-scoped).
+**Rationale:** `run-result.schema.json` is workflow-scoped — it has `workflowId`, `steps[]`, etc. Phase 7 adds single-agent execution that doesn't belong to a workflow. Forcing a single-agent result into the workflow RunResult shape would require fake `workflowId: 'cli'` and a single-step `steps` array — awkward and misleading. A dedicated `AgentResult` is cleaner and future-compatible (workflow runner can compose multiple AgentResults into a RunResult).
+**Alternatives considered:** Reuse RunResult (rejected — wrong semantic shape); return an unvalidated plain object (rejected — violates D-005 public contracts must have schemas).
+**Impact:** New schema compiled at startup in `src/core/validators/index.js`. `validateAgentResult()` exported.
+**Locked:** no
+
+---
+
+## [2026-03-16] Phase 7 — Memory Store Scope via Key Prefix
+
+**Phase:** 7 — Memory Store
+**Decision:** `createScope(store, runId)` creates a view of the store where all keys are prefixed `${runId}:` internally. The underlying `Map` is shared — the prefix is carried in the `_prefix` field of the store object.
+**Rationale:** Simplest V1 isolation mechanism with zero overhead. No second Map copy needed. `list()` strips the prefix when returning keys to callers. The prefix approach matches how many KV stores implement namespacing (Redis `{prefix}key`, etc.).
+**Alternatives considered:** Separate Map per scope (rejected — makes it impossible to share state across scopes when that becomes needed); no scoping (rejected — run isolation is a correctness requirement for multi-run scenarios).
+**Impact:** All store functions (`get`, `set`, `del`, `list`) check `store._prefix` before constructing internal keys.
+**Locked:** no
 
 ---
 

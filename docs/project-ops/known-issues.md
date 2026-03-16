@@ -2,7 +2,7 @@
 
 > Active issues, blockers, and risks tracked here.
 > Resolved issues are marked ✅ and kept for historical reference.
-> **Last updated:** 2026-03-16
+> **Last updated:** 2026-03-16 (after Phase 8)
 
 ---
 
@@ -27,6 +27,34 @@
 
 ## Active Issues
 
+### [KI-007] Workflow Step Schema: Breaking Change — `stepId`/`agentId` Removed
+
+**Severity:** medium
+**Phase:** 8
+**Status:** open
+**Reported:** 2026-03-16
+
+**Description:** The `workflow-manifest.schema.json` step shape was updated in Phase 8 to use `id`/`type`/`ref` instead of `stepId`/`agentId`. Any workflow manifests written against the Phase 2–7 schema are now invalid.
+**Impact:** Users who have written custom workflow manifests using the old `stepId`/`agentId` format will receive schema validation errors on registration.
+**Workaround:** Update step definitions to use `id`, `type`, and `ref` fields. Example: `{ stepId: 'foo', agentId: 'bar' }` → `{ id: 'foo', type: 'agent', ref: 'bar' }`.
+**Resolution:** _Not planned for reversal — the new format is a clean break. Document migration path in README or CHANGELOG when V1 is stabilised._
+
+---
+
+### [KI-008] `tool` Step Type Not Covered by Tests
+
+**Severity:** low
+**Phase:** 8
+**Status:** open
+**Reported:** 2026-03-16
+
+**Description:** The `tool` step type in the workflow runner calls `executeTool` directly. It is implemented but not covered by a dedicated workflow-runner test (no test creates a workflow with `type: 'tool'`).
+**Impact:** A regression in the `tool` step type could go undetected until a CLI or integration test is added.
+**Workaround:** The `executeTool` function is independently tested in `tests/tools/executor.test.js`. The `tool` step path in `executeStep` is minimal (3 lines).
+**Resolution:** _Pending — add a workflow-runner test with a tool step in a follow-up session._
+
+---
+
 ### [KI-004] shell-exec Shell Injection Risk
 
 **Severity:** medium
@@ -37,7 +65,7 @@
 **Description:** The `shell-exec` tool passes the `command` string directly to `sh -c`. This is a shell injection vector if the command is constructed from untrusted input.
 **Impact:** An agent or workflow constructing shell commands from user-supplied data could execute arbitrary shell commands.
 **Workaround:** `allowShell` is `false` by default. Operators must opt in via `PA_ALLOW_SHELL=true`. Do not construct shell commands from untrusted data.
-**Resolution:** _Pending — Phase 7+ may add an approved-command allowlist or sandboxed execution._
+**Resolution:** _Pending — Phase 8+ may add an approved-command allowlist or sandboxed execution._
 
 ---
 
@@ -102,4 +130,14 @@
 
 ## Resolved Issues
 
-_None yet._
+### [KI-006] `repo-inspect-agent` Used Wrong Field Name from `file-list`
+
+**Severity:** low
+**Phase:** 7
+**Status:** ✅ resolved
+**Reported:** 2026-03-16
+**Resolved:** 2026-03-16
+
+**Description:** The `repo-inspect-agent` initially referenced `result.files` after calling the `file-list` tool. The tool actually returns `{ entries: string[] }`, not `{ files: string[] }`.
+**Impact:** `agent:run repo-inspect` failed with "Cannot read properties of undefined (reading 'length')".
+**Resolution:** ✅ Fixed in same session — updated `repo-inspect-agent.js` to use `result.entries`. Also updated the agent manifest to remove the unsupported `pattern` input field (file-list does not accept it).

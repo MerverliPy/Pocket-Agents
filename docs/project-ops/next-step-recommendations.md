@@ -2,144 +2,78 @@
 
 > Written at the end of each session to guide the next session.
 > The agent reading this should treat it as the starting context for their work.
-> **Last updated:** 2026-03-16 (after Phase 6 — Tool Execution Layer)
+> **Last updated:** 2026-03-16 (after Phase 8 — Sequential Workflow Runner)
 
 ---
 
-## Current Recommendation: Phase 7 — Run-Scoped Memory Store + Workflow Runner
+## Current Recommendation: Phase 9 — Hardening and Coverage
 
-**Phase:** 7
-**Prerequisite:** Phase 6 complete ✅
+**Phase:** 9 (Hardening)
+**Prerequisite:** Phase 8 complete ✅
 
 ---
 
 ## What to Do
 
-### Step 1 — Memory Store (`src/state/memory-store.js`)
+### Option A — Coverage and Hardening
 
-Run-scoped in-memory KV store (`stateStore` placeholder in runtime is still null):
-- `createStore()` → returns new frozen store
-- `createScope(store, runId)` → scoped store (keys prefixed `${runId}:` internally)
-- `get(store, key)` → value or `undefined`
-- `set(store, key, value)` → new store with key added/updated
-- `del(store, key)` → new store with key removed
-- `list(store)` → `[{ key, value }]` entries (strips prefix for scoped stores)
-- **No mutation** — every operation returns new store object
+Phase 8 (workflow runner) is complete. The next natural step is hardening V1:
 
-Wire into `src/runtime/index.js`: replace `stateStore: null` with `stateStore: createStore()`.
+1. **Tool step test coverage** (KI-008)
+   - Add a workflow-runner test with `type: 'tool'` step using a built-in tool (e.g. `schema-validate`)
+   - Verify the tool step resolves inputMapping and calls executeTool correctly
 
-### Step 2 — Workflow Runner (`src/runner/workflow-runner.js`)
+2. **Connect dmux plan templates to real `workflow:run` command**
+   - Update `src/cli/dmux.js` plan output templates to reference `workflow:run` (was previously `run:workflow`)
+   - No new functionality — just update the template strings
 
-A minimal sequential workflow executor:
-- `runWorkflow(runtime, workflowId, input)` → validates manifest, executes steps in order
-- Each step emits `step.started` + `step.completed` via `runtime.eventBus`
-- Emit `workflow.started` and `workflow.completed` (or `workflow.failed`) run-level events
-- No real agent execution — stub agent call with `{ output: input }` for Phase 7
+3. **README update**
+   - Document the `workflow:run` command and the workflow step format
+   - Include a quick-start example showing a 2-step workflow
 
-### Step 3 — Connect `dmux` plans
+4. **Consider adding `--json` flag to suppress log output**
+   - Currently the CLI outputs structured logs to stdout alongside the JSON result
+   - A `--json` flag or `PA_LOG_LEVEL=error` env var would allow clean JSON-only output
 
-The `dmux plan` command was added in Phase 5 as a forward-compatible utility. In Phase 7, wire `dmux run` to `runWorkflow`.
+### Option B — Phase 9: Python Agent Adapter (see `docs/decisions.md` D-010)
 
-### Step 4 — Tests (TDD first)
-
-- `tests/state/memory-store.test.js`
-- `tests/runner/workflow-runner.test.js`
-- Update `tests/runtime/runtime.test.js` to verify `stateStore` is no longer null
+Phase 7–8 complete the Node-side agent/workflow execution. Next major capability is Python agent support:
+1. Define a subprocess contract (stdin/stdout JSON-RPC or newline-delimited JSON)
+2. Implement `PythonAgentAdapter` in `src/runner/`
+3. Add `adapter` field to agent-manifest schema (optional, default: 'node')
 
 ---
 
-## Files to Read Before Starting Phase 7
+## Files to Read Before Starting Phase 9
 
 1. `GLOBAL-INSTRUCTION-BLOCK.md`
 2. `CLAUDE.md`
-3. `src/runtime/index.js` — `stateStore` still null; update it
-4. `src/core/registry/agent-registry.js` — pattern for memory store
-5. `src/cli/dmux.js` — understand what dmux plan outputs for wiring
-6. `contracts/workflow-manifest.schema.json` — step shape
+3. `src/cli/dmux.js` — update template to reference `workflow:run`
+4. `src/runner/workflow-runner.js` — understand the tool step type path (KI-008)
+5. `docs/project-ops/known-issues.md` — review KI-007 and KI-008
+6. `docs/project-ops/phase-progress.md`
 7. This file
-
----
-
-## What to Do
-
-### Step 1 — Memory Store (`src/state/memory-store.js`)
-
-Run-scoped in-memory key-value store (the `stateStore` placeholder in runtime is still null):
-- `createStore()` → returns a new empty store (frozen)
-- `createScope(store, runId)` → returns a store scoped to that run (keys prefixed internally with `${runId}:`)
-- `get(store, key)` → returns value or `undefined`
-- `set(store, key, value)` → returns new store with key added/updated
-- `del(store, key)` → returns new store with key removed
-- `list(store)` → returns array of `{ key, value }` entries
-- **No mutation**: every operation returns a new store object
-
-### Step 2 — Wire `stateStore` into Runtime Assembly
-
-Update `src/runtime/index.js`:
-```js
-import { createStore } from '../state/memory-store.js';
-// ...
-stateStore: createStore(),
-```
-
-### Step 3 — Workflow Runner (`src/runner/workflow-runner.js`)
-
-A minimal sequential workflow executor:
-- `runWorkflow(runtime, workflowId, input)` → validates workflow manifest exists in registry, executes each step in order, collects results
-- Each step invokes `runStep(runtime, step, context)` where `context` is the accumulated output of prior steps
-- No actual agent execution in Phase 6 — stub out the agent call with a placeholder that returns `{ output: input }`
-- Validate the workflow manifest using `validateWorkflowManifest` before executing
-- Emit events via `runtime.eventBus` for key lifecycle moments: `workflow.started`, `workflow.completed`, `step.started`, `step.completed`
-
-### Step 3a — Add `run:workflow` CLI command
-
-- Create `src/cli/run-workflow.js` and route it from `src/cli/index.js`.
-- Accept workflow id/path input and call the new workflow runner.
-- Keep execution strictly single-process and sequential for V1.
-
-### Step 3b — Connect preparatory dmux plans
-
-- Keep `src/cli/dmux.js` as check/plan tooling.
-- Update dmux plan command templates to reference the real `run:workflow` command once implemented.
-- Do not add parallel execution inside Pocket-Agents runtime; dmux remains external orchestration.
-
-### Step 4 — Unit Tests (TDD — write tests first)
-
-Create:
-- `tests/state/memory-store.test.js` — full coverage of createStore, get, set, del, list, createScope
-- `tests/runner/workflow-runner.test.js` — tests for runWorkflow using registries populated with example manifests
-
-### Step 5 — Verify
-
-```bash
-node --test   # all tests pass, 0 failures
-node src/cli/index.js list:agents     # echo-agent
-node src/cli/index.js list:workflows  # hello-workflow
-```
 
 ---
 
 ## Risks to Watch For
 
-1. **Memory store scoping**: Use `${runId}:${key}` as the internal key. `list(store)` for a scoped store should only return keys for that runId scope — strip the prefix before returning.
-2. **Workflow runner — no real agent execution**: The runner must not try to execute agent code. Use a stub that returns the input unchanged. Real agent execution is Phase 7+.
-3. **Immutability in memory store**: Same pattern as registries — `new Map([...store.entries, [key, value]])`.
-4. **stateStore is still null**: Update both `src/runtime/index.js` and `tests/runtime/runtime.test.js` when wiring.
+1. **Schema breaking change documented (KI-007)**: Any custom workflow manifests using old `stepId`/`agentId` format will fail to register. Document the migration path clearly before V1 is publicised.
+2. **Tool step `ref` must match a BUILTIN_TOOLS key**: Tool step validation is runtime-only (no registry check at manifest registration time). A typo in `ref` on a tool step will produce a clear error at step execution time but not at registration time.
+3. **Input mapping silently returns `undefined` for missing paths**: `resolvePath` returns `undefined` for paths that don't exist in the workflow context. Agent input validation will catch this if the agent's inputSchema marks the field as required, but otherwise it passes silently.
 
 ---
 
-## Files to Read Before Starting Phase 6
+## Archive — Phase 8 Session Recommendations
 
-1. `GLOBAL-INSTRUCTION-BLOCK.md`
-2. `CLAUDE.md`
-3. `src/runtime/index.js` — note: `stateStore` is still null; `registries` is now wired
-4. `src/core/registry/agent-registry.js` — pattern to follow for memory store
-5. `tests/runtime/runtime.test.js` — update stateStore assertion
-6. `contracts/workflow-manifest.schema.json` — step shape
-7. `src/cli/dmux.js` — align plan templates once `run:workflow` exists
-8. This file
+### (Archived 2026-03-16 — Phase 8 complete)
 
----
+Phase 8 delivered the sequential workflow runner. Delivered:
+- `contracts/workflow-manifest.schema.json` — updated to Phase 8 step format (id/type/ref)
+- `src/runner/workflow-runner.js` — runWorkflow() with 4 step types, input mapping, timeout, onError policy
+- 3 new example workflows (repo-inspect, api-normalize, content-admin)
+- `src/cli/workflow-run.js` + `workflow:run` CLI command
+- 29 new tests (398 total) — all pass
 
 ## Archive — Phase 5 Session Recommendations
 
